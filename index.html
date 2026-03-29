@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DECOMP — Lua Deobfuscator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #18181f;
+    --border: #2a2a3a;
+    --accent: #7c6af7;
+    --accent2: #e85dff;
+    --accent3: #00e5c3;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --danger: #ff5252;
+    --success: #00e5c3;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid bg */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(124,106,247,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,106,247,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Glow orbs */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.15;
+  }
+  .orb-1 { width: 600px; height: 600px; background: var(--accent); top: -200px; left: -100px; }
+  .orb-2 { width: 400px; height: 400px; background: var(--accent2); bottom: -100px; right: -100px; }
+  .orb-3 { width: 300px; height: 300px; background: var(--accent3); top: 40%; left: 60%; }
+
+  /* Layout */
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Header */
+  header {
+    padding: 32px 0 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-mark {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    font-weight: 800;
+    color: white;
+    font-family: var(--mono);
+  }
+
+  .logo-text {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .logo-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--muted);
+    background: var(--surface);
+  }
+
+  /* Main */
+  main {
+    padding: 40px 0;
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    gap: 24px;
+    min-height: calc(100vh - 140px);
+  }
+
+  /* Panel */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface2);
+  }
+
+  .panel-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-title .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent3);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    border: 2px dashed transparent;
+    margin: 16px;
+    border-radius: 12px;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(124,106,247,0.05);
+  }
+
+  .upload-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon {
+    width: 72px; height: 72px;
+    border: 2px solid var(--border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+    font-size: 28px;
+    transition: all 0.3s;
+    background: var(--surface2);
+  }
+
+  .upload-zone:hover .upload-icon {
+    border-color: var(--accent);
+    background: rgba(124,106,247,0.1);
+    transform: scale(1.05);
+  }
+
+  .upload-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .upload-sub {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.6;
+    font-family: var(--mono);
+  }
+
+  .file-types {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 16px;
+    justify-content: center;
+  }
+
+  .file-type-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+  }
+
+  /* File info */
+  .file-info {
+    padding: 16px 20px;
+    background: rgba(124,106,247,0.08);
+    border-top: 1px solid var(--border);
+    display: none;
+  }
+
+  .file-info.visible { display: block; }
+
+  .file-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* Options */
+  .options-section {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .options-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  .option-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(42,42,58,0.5);
+  }
+
+  .option-row:last-child { border-bottom: none; }
+
+  .option-label {
+    font-size: 13px;
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .option-desc {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  /* Toggle */
+  .toggle {
+    position: relative;
+    width: 38px; height: 20px;
+    flex-shrink: 0;
+  }
+
+  .toggle input { display: none; }
+
+  .toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: 0.3s;
+  }
+
+  .toggle-slider::after {
+    content: '';
+    position: absolute;
+    width: 14px; height: 14px;
+    background: white;
+    border-radius: 50%;
+    top: 3px; left: 3px;
+    transition: 0.3s;
+  }
+
+  .toggle input:checked + .toggle-slider { background: var(--accent); }
+  .toggle input:checked + .toggle-slider::after { transform: translateX(18px); }
+
+  /* Decompile button */
+  .btn-decompile {
+    width: calc(100% - 40px);
+    margin: 0 20px 20px;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-decompile::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+    opacity: 0;
+    transition: 0.3s;
+  }
+
+  .btn-decompile:hover::before { opacity: 1; }
+  .btn-decompile:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(124,106,247,0.4); }
+  .btn-decompile:active { transform: translateY(0); }
+  .btn-decompile:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* Right panel */
+  .output-panel {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .output-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    flex-wrap: wrap;
+  }
+
+  .toolbar-spacer { flex: 1; }
+
+  .tab-group {
+    display: flex;
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+  }
+
+  .tab-btn {
+    padding: 6px 14px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
+
+  .tab-btn.active {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+
+  .btn-action {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-action:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(124,106,247,0.08);
+  }
+
+  .btn-action.success {
+    border-color: var(--success);
+    color: var(--success);
+    background: rgba(0,229,195,0.08);
+  }
+
+  .btn-dl {
+    background: rgba(124,106,247,0.15);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .btn-dl:hover {
+    background: rgba(124,106,247,0.25);
+  }
+
+  /* Output area */
+  .output-area {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Empty state */
+  .empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    gap: 12px;
+  }
+
+  .empty-icon {
+    font-size: 48px;
+    opacity: 0.3;
+  }
+
+  .empty-text {
+    font-family: var(--mono);
+    font-size: 13px;
+    text-align: center;
+    line-height: 1.8;
+  }
+
+  /* Code view */
+  .code-view {
+    display: none;
+    height: 100%;
+    flex-direction: column;
+  }
+
+  .code-view.visible { display: flex; }
+
+  /* Line numbers + code */
+  .code-wrapper {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .line-numbers {
+    padding: 20px 0;
+    background: rgba(0,0,0,0.2);
+    border-right: 1px solid var(--border);
+    color: var(--muted);
+    text-align: right;
+    user-select: none;
+    flex-shrink: 0;
+    min-width: 52px;
+  }
+
+  .line-numbers span {
+    display: block;
+    padding: 0 12px 0 8px;
+    font-size: 11px;
+  }
+
+  .code-content {
+    flex: 1;
+    padding: 20px 24px;
+    overflow: auto;
+    white-space: pre;
+    color: var(--text);
+    tab-size: 2;
+  }
+
+  /* Syntax highlighting */
+  .kw { color: #c792ea; }
+  .str { color: #c3e88d; }
+  .num { color: #f78c6c; }
+  .cmnt { color: #546e7a; font-style: italic; }
+  .fn { color: #82aaff; }
+  .op { color: #89ddff; }
+  .builtin { color: #ffcb6b; }
+  .id { color: var(--text); }
+
+  /* Search bar */
+  .search-bar {
+    padding: 10px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--surface2);
+    display: none;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .search-bar.visible { display: flex; }
+
+  .search-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--muted); }
+
+  .search-count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  /* Stats bar */
+  .stats-bar {
+    padding: 8px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--surface2);
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .stat strong {
+    color: var(--accent3);
+    font-weight: 500;
+  }
+
+  /* Progress */
+  .progress-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10,10,15,0.85);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+    z-index: 10;
+  }
+
+  .progress-overlay.visible { display: flex; }
+
+  .progress-spinner {
+    width: 48px; height: 48px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .progress-text {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .progress-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 280px;
+  }
+
+  .progress-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    transition: all 0.3s;
+  }
+
+  .progress-step.active { color: var(--text); }
+  .progress-step.done { color: var(--success); }
+
+  .step-icon { width: 16px; text-align: center; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* Highlight match */
+  mark {
+    background: rgba(255,203,107,0.3);
+    color: #ffcb6b;
+    border-radius: 2px;
+  }
+
+  .highlight-current {
+    background: rgba(255,203,107,0.6) !important;
+    color: #000 !important;
+  }
+
+  /* Notification */
+  .notification {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 12px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transform: translateY(20px);
+    opacity: 0;
+    transition: all 0.3s;
+    z-index: 100;
+    pointer-events: none;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  .notification.show {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .notification.success { border-color: var(--success); }
+  .notification.error { border-color: var(--danger); }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    main {
+      grid-template-columns: 1fr;
+    }
+    .output-panel {
+      min-height: 60vh;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+
+<div class="container">
+
+  <header>
+    <div class="logo">
+      <div class="logo-mark">{}</div>
+      <div>
+        <div class="logo-text">DECOMP</div>
+        <div class="logo-sub">Lua Deobfuscator</div>
+      </div>
+    </div>
+    <div class="badge">v1.0 · Client-side</div>
+  </header>
+
+  <main>
+
+    <!-- Left panel: Upload + Options -->
+    <div class="panel" style="height: fit-content; position: sticky; top: 24px;">
+
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="dot"></span>
+          Input
+        </div>
+      </div>
+
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" accept=".lua,.txt,.luac,.min.js,.js,.html,.css,.obf,.enc">
+        <div class="upload-icon">📂</div>
+        <div class="upload-title">Drop your file here</div>
+        <div class="upload-sub">or click to browse</div>
+        <div class="file-types">
+          <span class="file-type-tag">.lua</span>
+          <span class="file-type-tag">.luac</span>
+          <span class="file-type-tag">.js</span>
+          <span class="file-type-tag">.html</span>
+          <span class="file-type-tag">.css</span>
+          <span class="file-type-tag">.txt</span>
+          <span class="file-type-tag">.obf</span>
+        </div>
+      </div>
+
+      <div class="file-info" id="fileInfo">
+        <div class="file-name" id="fileName">—</div>
+        <div class="file-meta" id="fileMeta">—</div>
+      </div>
+
+      <div class="options-section">
+        <div class="options-title">Deobfuscation Options</div>
+
+        <div class="option-row">
+          <div class="option-label">
+            Resolve constants
+            <span class="option-desc">Fold constant arrays & literals</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="optConstants" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="option-row">
+          <div class="option-label">
+            Demangle names
+            <span class="option-desc">Rename obfuscated variables</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="optDemangle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="option-row">
+          <div class="option-label">
+            Remove junk code
+            <span class="option-desc">Strip dead assignments & noise</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="optJunk" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="option-row">
+          <div class="option-label">
+            Restore control flow
+            <span class="option-desc">Fix if/else, loops, returns</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="optFlow" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="option-row">
+          <div class="option-label">
+            Anti-tamper removal
+            <span class="option-desc">Strip debug hooks & guards</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="optAntiTamper" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="option-row">
+          <div class="option-label">
+            Format output
+            <span class="option-desc">Indent & prettify code</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="optFormat" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <button class="btn-decompile" id="decompileBtn" disabled>
+        ⚡ Decompile
+      </button>
+
+    </div>
+
+    <!-- Right panel: Output -->
+    <div class="panel output-panel">
+
+      <div class="output-toolbar">
+        <div class="panel-title">
+          <span id="outDot" class="dot" style="background:var(--muted);animation:none"></span>
+          Output
+        </div>
+
+        <div class="tab-group" id="tabGroup" style="display:none">
+          <button class="tab-btn active" data-tab="code" onclick="switchTab('code')">Code</button>
+          <button class="tab-btn" data-tab="raw" onclick="switchTab('raw')">Raw</button>
+        </div>
+
+        <div class="toolbar-spacer"></div>
+
+        <button class="btn-action" id="searchBtn" onclick="toggleSearch()" title="Search (Ctrl+F)" style="display:none">
+          🔍 Search
+        </button>
+        <button class="btn-action" id="copyBtn" onclick="copyOutput()" style="display:none">
+          📋 Copy
+        </button>
+        <button class="btn-action btn-dl" id="dlBtn" onclick="downloadOutput()" style="display:none">
+          ⬇ Download .txt
+        </button>
+      </div>
+
+      <div class="output-area" id="outputArea">
+
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">⚡</div>
+          <div class="empty-text">
+            Upload a file and hit Decompile<br>
+            Output will appear here
+          </div>
+        </div>
+
+        <div class="code-view" id="codeView">
+          <div class="code-wrapper" id="codeWrapper">
+            <div class="line-numbers" id="lineNumbers"></div>
+            <div class="code-content" id="codeContent"></div>
+          </div>
+        </div>
+
+        <div class="progress-overlay" id="progressOverlay">
+          <div class="progress-spinner"></div>
+          <div class="progress-steps" id="progressSteps"></div>
+        </div>
+
+      </div>
+
+      <div class="search-bar" id="searchBar">
+        <input type="text" class="search-input" id="searchInput" placeholder="Search in output..." oninput="doSearch()">
+        <span class="search-count" id="searchCount"></span>
+        <button class="btn-action" onclick="navSearch(-1)">↑</button>
+        <button class="btn-action" onclick="navSearch(1)">↓</button>
+        <button class="btn-action" onclick="toggleSearch()">✕</button>
+      </div>
+
+      <div class="stats-bar" id="statsBar" style="display:none">
+        <div class="stat">Lines: <strong id="statLines">—</strong></div>
+        <div class="stat">Chars: <strong id="statChars">—</strong></div>
+        <div class="stat">Type: <strong id="statType">—</strong></div>
+        <div class="stat">Passes: <strong id="statPasses">—</strong></div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- Notification -->
+<div class="notification" id="notification"></div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────
+let uploadedFile = null;
+let rawOutput = '';
+let currentTab = 'code';
+let searchMatches = [];
+let searchIndex = 0;
+
+// ─── File Upload ─────────────────────────────────────────────────────
+const fileInput = document.getElementById('fileInput');
+const uploadZone = document.getElementById('uploadZone');
+
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+uploadZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  uploadZone.classList.add('drag-over');
+});
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  uploadedFile = file;
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileMeta').textContent = `${formatBytes(file.size)} · ${file.type || 'text/plain'} · Modified: ${new Date(file.lastModified).toLocaleDateString()}`;
+  document.getElementById('fileInfo').classList.add('visible');
+  document.getElementById('decompileBtn').disabled = false;
+}
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(2) + ' MB';
+}
+
+// ─── Decompile ───────────────────────────────────────────────────────
+document.getElementById('decompileBtn').addEventListener('click', async () => {
+  if (!uploadedFile) return;
+
+  const text = await uploadedFile.text();
+  const opts = {
+    constants: document.getElementById('optConstants').checked,
+    demangle: document.getElementById('optDemangle').checked,
+    junk: document.getElementById('optJunk').checked,
+    flow: document.getElementById('optFlow').checked,
+    antiTamper: document.getElementById('optAntiTamper').checked,
+    format: document.getElementById('optFormat').checked,
+  };
+
+  showProgress();
+
+  // Simulate pipeline steps with delays
+  const steps = [
+    { label: 'Reading file', fn: () => text },
+    { label: 'Stripping pipeline scaffolding', fn: reversePipeline },
+    { label: 'Removing name generators', fn: cleanNameGenerators },
+    { label: opts.antiTamper ? 'Removing anti-tamper' : 'Skipping anti-tamper', fn: opts.antiTamper ? handleAntiTamper : x=>x },
+    { label: opts.constants ? 'Resolving constants' : 'Skipping constants', fn: opts.constants ? handleConstantArray : x=>x },
+    { label: opts.demangle ? 'Demangling names' : 'Skipping demangle', fn: opts.demangle ? demangleVariables : x=>x },
+    { label: opts.junk ? 'Removing junk code' : 'Skipping junk removal', fn: opts.junk ? removeJunkcode : x=>x },
+    { label: opts.flow ? 'Restoring control flow' : 'Skipping control flow', fn: opts.flow ? restoreControlFlow : x=>x },
+    { label: 'Reconstructing functions', fn: reconstructFunctions },
+    { label: opts.format ? 'Formatting output' : 'Skipping format', fn: opts.format ? formatCode : x=>x },
+    { label: 'Finalizing', fn: x=>x },
+  ];
+
+  const stepsEl = document.getElementById('progressSteps');
+  stepsEl.innerHTML = steps.map((s,i) => `
+    <div class="progress-step" id="step${i}">
+      <span class="step-icon">○</span>
+      <span>${s.label}</span>
+    </div>
+  `).join('');
+
+  let code = text;
+  for (let i = 0; i < steps.length; i++) {
+    await sleep(60 + Math.random() * 80);
+    document.getElementById(`step${i}`).classList.add('active');
+    document.getElementById(`step${i}`).querySelector('.step-icon').textContent = '◎';
+    try {
+      code = steps[i].fn(code);
+    } catch(e) {
+      code = code; // keep going on error
+    }
+    document.getElementById(`step${i}`).classList.remove('active');
+    document.getElementById(`step${i}`).classList.add('done');
+    document.getElementById(`step${i}`).querySelector('.step-icon').textContent = '✓';
+  }
+
+  rawOutput = code;
+  hideProgress();
+  showOutput(code, steps.length);
+});
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ─── Output ───────────────────────────────────────────────────────────
+function showOutput(code, passes) {
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('codeView').classList.add('visible');
+  document.getElementById('tabGroup').style.display = 'flex';
+  document.getElementById('searchBtn').style.display = 'flex';
+  document.getElementById('copyBtn').style.display = 'flex';
+  document.getElementById('dlBtn').style.display = 'flex';
+  document.getElementById('statsBar').style.display = 'flex';
+  document.getElementById('outDot').style.cssText = 'background:var(--accent3)';
+
+  renderCode(code);
+
+  const lines = code.split('\n').length;
+  document.getElementById('statLines').textContent = lines.toLocaleString();
+  document.getElementById('statChars').textContent = code.length.toLocaleString();
+  document.getElementById('statType').textContent = detectType(uploadedFile?.name || '');
+  document.getElementById('statPasses').textContent = passes;
+}
+
+function renderCode(code) {
+  const lines = code.split('\n');
+
+  // Line numbers
+  document.getElementById('lineNumbers').innerHTML =
+    lines.map((_, i) => `<span>${i+1}</span>`).join('');
+
+  // Syntax highlight
+  const ext = (uploadedFile?.name || '').split('.').pop().toLowerCase();
+  const highlighted = highlightCode(code, ext);
+  document.getElementById('codeContent').innerHTML = highlighted;
+}
+
+function detectType(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const map = { lua:'Lua', luac:'Lua Bytecode', js:'JavaScript', html:'HTML', css:'CSS', txt:'Plaintext', obf:'Obfuscated', enc:'Encrypted' };
+  return map[ext] || ext.toUpperCase() || 'Unknown';
+}
+
+// ─── Syntax Highlighting ─────────────────────────────────────────────
+function highlightCode(code, ext) {
+  if (['lua', 'luac'].includes(ext)) return highlightLua(code);
+  if (['js'].includes(ext)) return highlightJS(code);
+  if (['html'].includes(ext)) return highlightHTML(code);
+  if (['css'].includes(ext)) return highlightCSS(code);
+  return escapeHtml(code);
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function highlightLua(code) {
+  const luaKw = /\b(and|break|do|else|elseif|end|false|for|function|goto|if|in|local|nil|not|or|repeat|return|then|true|until|while)\b/g;
+  const luaBuiltin = /\b(print|pairs|ipairs|type|tostring|tonumber|table|string|math|io|os|coroutine|require|pcall|xpcall|error|assert|rawget|rawset|setmetatable|getmetatable|next|select|unpack|load|loadfile|dofile|collectgarbage|rawequal|rawlen)\b/g;
+
+  let out = escapeHtml(code);
+  out = out.replace(/--\[\[[\s\S]*?\]\]/g, m => `<span class="cmnt">${m}</span>`);
+  out = out.replace(/--[^\n]*/g, m => `<span class="cmnt">${m}</span>`);
+  out = out.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, m => `<span class="str">${m}</span>`);
+  out = out.replace(/\b\d+\.?\d*\b/g, m => `<span class="num">${m}</span>`);
+  out = out.replace(luaBuiltin, m => `<span class="builtin">${m}</span>`);
+  out = out.replace(luaKw, m => `<span class="kw">${m}</span>`);
+  return out;
+}
+
+function highlightJS(code) {
+  const jsKw = /\b(var|let|const|function|return|if|else|for|while|do|break|continue|switch|case|default|class|extends|new|this|typeof|instanceof|null|undefined|true|false|import|export|from|async|await|try|catch|finally|throw|delete|void|in|of)\b/g;
+  let out = escapeHtml(code);
+  out = out.replace(/\/\/[^\n]*/g, m => `<span class="cmnt">${m}</span>`);
+  out = out.replace(/`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, m => `<span class="str">${m}</span>`);
+  out = out.replace(/\b\d+\.?\d*\b/g, m => `<span class="num">${m}</span>`);
+  out = out.replace(jsKw, m => `<span class="kw">${m}</span>`);
+  return out;
+}
+
+function highlightHTML(code) {
+  let out = escapeHtml(code);
+  out = out.replace(/&lt;!--[\s\S]*?--&gt;/g, m => `<span class="cmnt">${m}</span>`);
+  out = out.replace(/&lt;\/?[\w-]+/g, m => `<span class="kw">${m}</span>`);
+  out = out.replace(/"[^"]*"|'[^']*'/g, m => `<span class="str">${m}</span>`);
+  return out;
+}
+
+function highlightCSS(code) {
+  let out = escapeHtml(code);
+  out = out.replace(/\/\*[\s\S]*?\*\//g, m => `<span class="cmnt">${m}</span>`);
+  out = out.replace(/#[0-9a-fA-F]{3,8}\b/g, m => `<span class="num">${m}</span>`);
+  out = out.replace(/"[^"]*"|'[^']*'/g, m => `<span class="str">${m}</span>`);
+  out = out.replace(/[\w-]+(?=\s*:)/g, m => `<span class="builtin">${m}</span>`);
+  return out;
+}
+
+// ─── Tabs ─────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  if (tab === 'raw') {
+    document.getElementById('codeContent').textContent = rawOutput;
+    document.getElementById('lineNumbers').innerHTML = rawOutput.split('\n').map((_,i) => `<span>${i+1}</span>`).join('');
+  } else {
+    renderCode(rawOutput);
+  }
+}
+
+// ─── Search ───────────────────────────────────────────────────────────
+function toggleSearch() {
+  const bar = document.getElementById('searchBar');
+  bar.classList.toggle('visible');
+  if (bar.classList.contains('visible')) {
+    document.getElementById('searchInput').focus();
+  } else {
+    clearSearch();
+  }
+}
+
+function doSearch() {
+  const q = document.getElementById('searchInput').value;
+  if (!q) { clearSearch(); return; }
+
+  const content = document.getElementById('codeContent');
+  let html = currentTab === 'code' ? highlightCode(rawOutput, (uploadedFile?.name||'').split('.').pop()) : escapeHtml(rawOutput);
+
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(escaped, 'gi');
+  searchMatches = [];
+  let idx = 0;
+  html = html.replace(re, m => {
+    const id = `match-${idx++}`;
+    searchMatches.push(id);
+    return `<mark id="${id}">${m}</mark>`;
+  });
+
+  content.innerHTML = html;
+  document.getElementById('searchCount').textContent = `${searchMatches.length} result${searchMatches.length!==1?'s':''}`;
+  searchIndex = 0;
+  if (searchMatches.length) highlightCurrent();
+}
+
+function navSearch(dir) {
+  if (!searchMatches.length) return;
+  searchIndex = (searchIndex + dir + searchMatches.length) % searchMatches.length;
+  highlightCurrent();
+}
+
+function highlightCurrent() {
+  document.querySelectorAll('mark').forEach(m => m.classList.remove('highlight-current'));
+  const el = document.getElementById(searchMatches[searchIndex]);
+  if (el) {
+    el.classList.add('highlight-current');
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  document.getElementById('searchCount').textContent = `${searchIndex+1} / ${searchMatches.length}`;
+}
+
+function clearSearch() {
+  searchMatches = [];
+  document.getElementById('searchInput').value = '';
+  document.getElementById('searchCount').textContent = '';
+  if (rawOutput) renderCode(rawOutput);
+}
+
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault();
+    if (rawOutput) toggleSearch();
+  }
+  if (e.key === 'Escape') {
+    const bar = document.getElementById('searchBar');
+    if (bar.classList.contains('visible')) toggleSearch();
+  }
+});
+
+// ─── Copy / Download ─────────────────────────────────────────────────
+async function copyOutput() {
+  try {
+    await navigator.clipboard.writeText(rawOutput);
+    const btn = document.getElementById('copyBtn');
+    btn.classList.add('success');
+    btn.textContent = '✓ Copied!';
+    showNotification('✓ Copied to clipboard', 'success');
+    setTimeout(() => { btn.classList.remove('success'); btn.innerHTML = '📋 Copy'; }, 2000);
+  } catch(e) {
+    showNotification('Failed to copy', 'error');
+  }
+}
+
+function downloadOutput() {
+  const base = uploadedFile ? uploadedFile.name.replace(/\.[^.]+$/, '') : 'decompiled';
+  const blob = new Blob([rawOutput], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${base}_decompiled.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showNotification('⬇ Downloaded!', 'success');
+}
+
+// ─── Progress ────────────────────────────────────────────────────────
+function showProgress() {
+  document.getElementById('progressOverlay').classList.add('visible');
+  document.getElementById('decompileBtn').disabled = true;
+}
+
+function hideProgress() {
+  document.getElementById('progressOverlay').classList.remove('visible');
+  document.getElementById('decompileBtn').disabled = false;
+}
+
+// ─── Notification ─────────────────────────────────────────────────────
+function showNotification(msg, type='') {
+  const el = document.getElementById('notification');
+  el.textContent = msg;
+  el.className = `notification ${type} show`;
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ─── Deobfuscation Engine (JS port of the Python logic) ──────────────
+
+function reversePipeline(code) {
+  // Remove prometheus pipeline require block
+  code = code.replace(/local Pipeline = require\(["']prometheus\.pipeline["']\)[^}]+end\)/gs, '');
+  code = code.replace(/pipeline:addStep\([^)]+\)/g, '');
+  code = code.replace(/pipeline:setNameGenerator\([^)]+\)/g, '');
+  return code;
+}
+
+function cleanNameGenerators(code) {
+  code = code.replace(/util\.shuffle\([^)]+\);/g, '');
+  code = code.replace(/local namegenerators = .*?\}\}/gs, '');
+  // Remove identity wrappers: function(a,b) return a,b end
+  for (let arity = 0; arity <= 5; arity++) {
+    const args = Array.from({length:arity},(_,i)=>String.fromCharCode(97+i)).join(', ');
+    if (arity === 0) continue;
+    const re = new RegExp(
+      `(?:local\\s+(\\w+)\\s*=\\s*)?function\\(${args.replace(/,/g,'\\s*,\\s*')}\\)\\s*return\\s+${args}\\s+end`,
+      'g'
+    );
+    code = code.replace(re, '');
+  }
+  return code;
+}
+
+function handleAntiTamper(code) {
+  code = code.replace(/local valid=true;.*?if valid then else.*?end/gs, 'local valid=true;');
+  code = code.replace(/debug\.sethook\(.*?end,?\s*"l",\s*5\);/gs, '');
+  return code;
+}
+
+function handleConstantArray(code) {
+  // Resolve table.concat string splits
+  code = code.replace(/table\.concat\(\{([^}]+)\}\)/g, (_, inner) => {
+    const parts = [...inner.matchAll(/"([^"]*)"/g)].map(m => m[1]);
+    return parts.length ? `"${parts.join('')}"` : _;
+  });
+
+  // Simplify `x and A or B` ternaries
+  code = code.replace(/\b(\w+)\s+and\s+(\d+)\s+or\s+(\d+)\b/g, (_, v, a, b) => `(${v} ? ${a} : ${b})`);
+
+  // Constant fold simple arithmetic: 3+5, 10-2 etc
+  code = code.replace(/\b(\d+)\s*([+\-*])\s*(\d+)\b/g, (_, a, op, b) => {
+    try { return String(eval(`${a}${op}${b}`)); } catch(e) { return _; }
+  });
+
+  // Remove no-op bitwise
+  code = code.replace(/(\w+)\s*%\s*1\b/g, '$1');
+  code = code.replace(/(\w+)\s*&\s*0\b/g, '0');
+  code = code.replace(/(\w+)\s*\^\s*0\b/g, '$1');
+  code = code.replace(/(\w+)\s*\|\s*0\b/g, '$1');
+
+  // Remove dead accessor functions: local function X(a) return ARR[a+N] end
+  code = code.replace(/local function \w+\(a\)\s*return \w+\[a\s*[+\-]\s*\d+\]\s*end/g, '');
+
+  return code;
+}
+
+function demangleVariables(code) {
+  const varMap = {
+    'V': 'table', 'D': 'buffer', 'B': 'byte', 'A': 'array',
+    'S': 'state', 'T': 'type', 'E': 'error', 'R': 'string',
+    'K': 'bit32', 'F': 'string_format', 'N': 'number',
+    'n': 'count', 's': 'str', 'r': 'result', 'o': 'obj',
+    'h': 'handle', 'e': 'elem', 'a': 'arr', 'b': 'buf',
+    'c': 'ch', 'd': 'ptr', 'g': 'global', 'l': 'list',
+    'm': 'mem', 'u': 'user', 'v': 'ver', 'k': 'key',
+    'p': 'pos', 'q': 'q', 'w': 'w', 'x': 'x', 'y': 'y', 'z': 'zone'
+  };
+
+  // Rename hex-style identifiers: _0A3F -> var_2623
+  code = code.replace(/\b_([0-9A-Fa-f]{4,})\b/g, (_, h) => `var_${parseInt(h,16)%10000}`);
+
+  // Rename _NNN -> var_NNN
+  code = code.replace(/\b_(\d+)\b/g, (_, n) => `var_${n}`);
+
+  // Apply single-letter var map only in clearly local/param context
+  for (const [obf, clean] of Object.entries(varMap)) {
+    code = code.replace(new RegExp(`(?<=local\\s+)${obf}(?=\\s*[=,\\n)])`, 'g'), clean);
+  }
+
+  return code;
+}
+
+function removeJunkcode(code) {
+  // Remove self-referential assignments: x = x + 1 (bare, no effect)
+  code = code.replace(/^\s*(\w+)\s*=\s*\1\s*[+\-]\s*\d+\s*$/gm, '');
+  // Remove nil assignments to fields
+  code = code.replace(/^\s*\w+\.\w+\s*=\s*nil\s*$/gm, '');
+  // Remove empty for loops
+  code = code.replace(/for\s+\w+\s*=\s*-?\d+,\s*#\w+,\s*-?\d+\s+do\s+end/g, '');
+  // Remove if x == -N then x = -N end patterns
+  code = code.replace(/if\s+\w+\s*==\s*-\d+\s+then\s+\w+\s*=\s*-\d+\s+end/g, '');
+  // Remove functions that only return empty table
+  code = code.replace(/function\s*\(\s*\.\.\.\s*\)\s*return\s+\{\}\s*end/g, '');
+  // Remove local x = nil|number that serve no purpose (followed by reassignment)
+  code = code.replace(/^\s*local\s+\w+\s*=\s*(?:-?\d+|nil)\s*$/gm, '');
+  return code;
+}
+
+function restoreControlFlow(code) {
+  // Normalize else if -> elseif (Lua)
+  code = code.replace(/else\s+if\b/g, 'elseif');
+  // Join if ... \n then onto one line
+  code = code.replace(/(\bif\b[^\n]*?)\s*\n\s*(\bthen\b)/gs, '$1 $2');
+  // Fix return spacing
+  code = code.replace(/return\s+(\w+)\(\)/g, 'return $1()');
+  // Fix end return -> end\nreturn
+  code = code.replace(/end\s+return\b/g, 'end\nreturn');
+  return code;
+}
+
+function reconstructFunctions(code) {
+  // Remove spurious varargs from simple functions
+  code = code.replace(/,\s*\.\.\.\)/g, ')');
+  // Fix jammed tokens: word)local -> word)\nlocal
+  code = code.replace(/(\w)\)local\b/g, '$1)\nlocal');
+  code = code.replace(/(\w)\)(if|for|while|function|return)\b/g, '$1)\n$2');
+  // Normalize ,function -> \nfunction
+  code = code.replace(/,\s*function\b/g, '\nfunction');
+  // Fix end return on same line
+  code = code.replace(/\bend\b(\s*)return\b/g, 'end\n$1return');
+  return code;
+}
+
+function formatCode(code) {
+  // Strip block comments
+  code = code.replace(/--\[\[[\s\S]*?\]\]/g, '');
+  // Strip line comments
+  code = code.replace(/--[^\n]*/g, '');
+  // Join escaped newlines
+  code = code.replace(/\\\n/g, ' ');
+  // Remove trailing whitespace per line
+  code = code.replace(/[ \t]+$/gm, '');
+  // Collapse 3+ blank lines to 2
+  code = code.replace(/\n{3,}/g, '\n\n');
+  // Indent
+  code = autoIndent(code);
+  return code.trim();
+}
+
+function autoIndent(code) {
+  const lines = code.split('\n');
+  let indent = 0;
+  const indentKw = /^\s*(function|if|for|while|repeat|do)\b/;
+  const dedentKw = /^\s*(end|until|else|elseif)\b/;
+  const output = [];
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { output.push(''); continue; }
+    if (dedentKw.test(line)) indent = Math.max(0, indent - 1);
+    output.push('  '.repeat(indent) + line);
+    if (indentKw.test(line) && !line.endsWith('end')) indent++;
+  }
+  return output.join('\n');
+}
+</script>
+</body>
+</html>
